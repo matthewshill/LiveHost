@@ -16,6 +16,26 @@ juce::PropertiesFile::Options createPropertiesOptions()
 }
 } // namespace
 
+class PluginManager::EffectOnlyScanner final : public juce::KnownPluginList::CustomScanner
+{
+public:
+    bool findPluginTypesFor(juce::AudioPluginFormat& format,
+                            juce::OwnedArray<juce::PluginDescription>& result,
+                            const juce::String& fileOrIdentifier) override
+    {
+        juce::OwnedArray<juce::PluginDescription> scannedPlugins;
+        format.findAllTypesForFile(scannedPlugins, fileOrIdentifier);
+
+        for (auto* plugin : scannedPlugins)
+        {
+            if (plugin != nullptr && ! plugin->isInstrument)
+                result.add(new juce::PluginDescription(*plugin));
+        }
+
+        return true;
+    }
+};
+
 PluginManager::PluginManager()
 {
     appProperties.setStorageParameters(createPropertiesOptions());
@@ -23,6 +43,8 @@ PluginManager::PluginManager()
     juce::addDefaultFormatsToManager(formatManager);
 
     loadKnownPlugins();
+    removeInstrumentPlugins();
+    knownPlugins.setCustomScanner(std::make_unique<EffectOnlyScanner>());
     knownPlugins.addChangeListener(this);
 }
 
@@ -91,6 +113,13 @@ void PluginManager::loadKnownPlugins()
     if (auto* properties = appProperties.getUserSettings())
         if (auto savedPluginList = properties->getXmlValue("knownPluginList"))
             knownPlugins.recreateFromXml(*savedPluginList);
+}
+
+void PluginManager::removeInstrumentPlugins()
+{
+    for (const auto& plugin : knownPlugins.getTypes())
+        if (plugin.isInstrument)
+            knownPlugins.removeType(plugin);
 }
 
 void PluginManager::saveKnownPlugins()

@@ -22,10 +22,13 @@ public:
                                    juce::AudioPluginFormat::PluginCreationCallback callback);
 
 private:
+    class EffectOnlyScanner;
+
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void loadKnownPlugins();
     void saveKnownPlugins();
+    void removeInstrumentPlugins();
 
     juce::ApplicationProperties appProperties;
     juce::AudioPluginFormatManager formatManager;
