@@ -55,6 +55,18 @@ juce::String AudioEngine::getActivePluginName() const
     return activePluginName;
 }
 
+bool AudioEngine::hasActivePlugin() const
+{
+    const juce::ScopedLock lock(pluginLock);
+    return activePlugin != nullptr;
+}
+
+bool AudioEngine::isActivePluginBypassed() const
+{
+    const juce::ScopedLock lock(pluginLock);
+    return activePluginBypassed;
+}
+
 void AudioEngine::setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
     const juce::ScopedLock lock(pluginLock);
@@ -64,12 +76,29 @@ void AudioEngine::setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plu
 
     activePlugin = std::move(plugin);
     activePluginName = activePlugin != nullptr ? activePlugin->getName() : "No plugin loaded";
+    activePluginBypassed = false;
     prepareActivePlugin();
 }
 
 void AudioEngine::clearActivePlugin()
 {
     setActivePlugin(nullptr);
+}
+
+void AudioEngine::setActivePluginBypassed(bool shouldBeBypassed)
+{
+    const juce::ScopedLock lock(pluginLock);
+    activePluginBypassed = shouldBeBypassed;
+}
+
+std::unique_ptr<juce::AudioProcessorEditor> AudioEngine::createActivePluginEditor()
+{
+    const juce::ScopedLock lock(pluginLock);
+
+    if (activePlugin == nullptr || ! activePlugin->hasEditor())
+        return nullptr;
+
+    return std::unique_ptr<juce::AudioProcessorEditor>(activePlugin->createEditorAndMakeActive());
 }
 
 void AudioEngine::prepareActivePlugin()
@@ -109,7 +138,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     {
         const juce::ScopedLock lock(pluginLock);
 
-        if (activePlugin != nullptr)
+        if (activePlugin != nullptr && ! activePluginBypassed)
         {
             midiBuffer.clear();
             activePlugin->processBlock(processBuffer, midiBuffer);

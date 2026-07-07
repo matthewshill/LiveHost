@@ -1,5 +1,30 @@
 #include "MainComponent.h"
 
+class MainComponent::PluginEditorWindow final : public juce::DocumentWindow
+{
+public:
+    PluginEditorWindow(juce::String title, std::unique_ptr<juce::AudioProcessorEditor> editor)
+        : DocumentWindow(std::move(title),
+                         juce::Colour::fromRGB(24, 26, 30),
+                         DocumentWindow::closeButton)
+    {
+        setUsingNativeTitleBar(true);
+        setContentOwned(editor.release(), true);
+        setResizable(true, true);
+        centreWithSize(juce::jmax(480, getWidth()), juce::jmax(320, getHeight()));
+        setVisible(true);
+    }
+
+    std::function<void()> onClose;
+
+private:
+    void closeButtonPressed() override
+    {
+        if (onClose != nullptr)
+            onClose();
+    }
+};
+
 MainComponent::MainComponent()
 {
     titleLabel.setText("LiveHost", juce::dontSendNotification);
@@ -26,12 +51,20 @@ MainComponent::MainComponent()
     addAndMakeVisible(loadPluginButton);
 
     clearPluginButton.setButtonText("Clear");
-    clearPluginButton.onClick = [this]
+    clearPluginButton.onClick = [this] { clearLoadedPlugin(); };
+    addAndMakeVisible(clearPluginButton);
+
+    bypassPluginButton.setButtonText("Bypass");
+    bypassPluginButton.onClick = [this]
     {
-        audioEngine.clearActivePlugin();
+        audioEngine.setActivePluginBypassed(bypassPluginButton.getToggleState());
         refreshPluginStatus();
     };
-    addAndMakeVisible(clearPluginButton);
+    addAndMakeVisible(bypassPluginButton);
+
+    openEditorButton.setButtonText("Open Editor");
+    openEditorButton.onClick = [this] { openActivePluginEditor(); };
+    addAndMakeVisible(openEditorButton);
 
     deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
         audioEngine.getDeviceManager(),
@@ -66,6 +99,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+    closePluginEditor();
 }
 
 void MainComponent::paint(juce::Graphics& g)
@@ -98,7 +132,9 @@ void MainComponent::resized()
     deviceSelector->setBounds(deviceArea);
 
     auto pluginControls = content.removeFromTop(32);
-    activePluginLabel.setBounds(pluginControls.removeFromLeft(juce::jmax(260, pluginControls.getWidth() - 260)));
+    activePluginLabel.setBounds(pluginControls.removeFromLeft(juce::jmax(220, pluginControls.getWidth() - 460)));
+    bypassPluginButton.setBounds(pluginControls.removeFromLeft(92).reduced(4, 0));
+    openEditorButton.setBounds(pluginControls.removeFromLeft(124).reduced(4, 0));
     loadPluginButton.setBounds(pluginControls.removeFromLeft(140).reduced(4, 0));
     clearPluginButton.setBounds(pluginControls.reduced(4, 0));
 
@@ -122,10 +158,16 @@ void MainComponent::refreshPluginStatus()
     pluginStatusLabel.setText(juce::String(pluginManager.getNumKnownPlugins()) + " plugins indexed",
                               juce::dontSendNotification);
     activePluginLabel.setText(audioEngine.getActivePluginName(), juce::dontSendNotification);
+    bypassPluginButton.setToggleState(audioEngine.isActivePluginBypassed(), juce::dontSendNotification);
+    bypassPluginButton.setEnabled(audioEngine.hasActivePlugin());
+    openEditorButton.setEnabled(audioEngine.hasActivePlugin());
+    clearPluginButton.setEnabled(audioEngine.hasActivePlugin());
 }
 
 void MainComponent::loadSelectedPlugin()
 {
+    closePluginEditor();
+
     const auto selectedRow = pluginListComponent->getTableListBox().getSelectedRow();
     const auto description = pluginManager.getPluginDescriptionAt(selectedRow);
 
@@ -161,4 +203,32 @@ void MainComponent::handlePluginCreated(std::unique_ptr<juce::AudioPluginInstanc
 
     audioEngine.setActivePlugin(std::move(plugin));
     refreshPluginStatus();
+}
+
+void MainComponent::clearLoadedPlugin()
+{
+    closePluginEditor();
+    audioEngine.clearActivePlugin();
+    refreshPluginStatus();
+}
+
+void MainComponent::openActivePluginEditor()
+{
+    closePluginEditor();
+
+    auto editor = audioEngine.createActivePluginEditor();
+
+    if (editor == nullptr)
+    {
+        activePluginLabel.setText(audioEngine.getActivePluginName() + " has no editor", juce::dontSendNotification);
+        return;
+    }
+
+    pluginEditorWindow = std::make_unique<PluginEditorWindow>(audioEngine.getActivePluginName(), std::move(editor));
+    pluginEditorWindow->onClose = [this] { closePluginEditor(); };
+}
+
+void MainComponent::closePluginEditor()
+{
+    pluginEditorWindow = nullptr;
 }

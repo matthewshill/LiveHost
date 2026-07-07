@@ -16,11 +16,16 @@ public:
     void resized() override;
 
 private:
+    class PluginEditorWindow;
+
     void timerCallback() override;
     void refreshDeviceStatus();
     void refreshPluginStatus();
     void loadSelectedPlugin();
     void handlePluginCreated(std::unique_ptr<juce::AudioPluginInstance> plugin, const juce::String& error);
+    void clearLoadedPlugin();
+    void openActivePluginEditor();
+    void closePluginEditor();
 
     AudioEngine audioEngine;
     PluginManager pluginManager;
@@ -30,6 +35,9 @@ private:
     juce::Label activePluginLabel;
     juce::TextButton loadPluginButton;
     juce::TextButton clearPluginButton;
+    juce::ToggleButton bypassPluginButton;
+    juce::TextButton openEditorButton;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     std::unique_ptr<juce::PluginListComponent> pluginListComponent;
+    std::unique_ptr<PluginEditorWindow> pluginEditorWindow;
 };

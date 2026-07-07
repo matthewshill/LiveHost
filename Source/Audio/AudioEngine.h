@@ -15,9 +15,13 @@ public:
     double getCurrentSampleRate() const;
     int getCurrentBufferSizeSamples() const;
     juce::String getActivePluginName() const;
+    bool hasActivePlugin() const;
+    bool isActivePluginBypassed() const;
 
     void setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin);
     void clearActivePlugin();
+    void setActivePluginBypassed(bool shouldBeBypassed);
+    std::unique_ptr<juce::AudioProcessorEditor> createActivePluginEditor();
 
 private:
     void prepareActivePlugin();
@@ -36,6 +40,7 @@ private:
     mutable juce::CriticalSection pluginLock;
     std::unique_ptr<juce::AudioPluginInstance> activePlugin;
     juce::String activePluginName = "No plugin loaded";
+    bool activePluginBypassed = false;
     juce::AudioBuffer<float> processBuffer;
     juce::MidiBuffer midiBuffer;
     double currentSampleRate = 44100.0;
