@@ -59,6 +59,27 @@ int PluginManager::getNumKnownPlugins() const
     return knownPlugins.getNumTypes();
 }
 
+std::optional<juce::PluginDescription> PluginManager::getPluginDescriptionAt(int index) const
+{
+    const auto plugins = knownPlugins.getTypes();
+
+    if (juce::isPositiveAndBelow(index, plugins.size()))
+        return plugins[index];
+
+    return std::nullopt;
+}
+
+void PluginManager::createPluginInstanceAsync(const juce::PluginDescription& description,
+                                              double initialSampleRate,
+                                              int initialBufferSize,
+                                              juce::AudioPluginFormat::PluginCreationCallback callback)
+{
+    formatManager.createPluginInstanceAsync(description,
+                                            initialSampleRate,
+                                            initialBufferSize,
+                                            std::move(callback));
+}
+
 void PluginManager::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
     if (source == &knownPlugins)
@@ -80,4 +101,3 @@ void PluginManager::saveKnownPlugins()
         properties->saveIfNeeded();
     }
 }
-

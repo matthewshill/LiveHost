@@ -14,6 +14,12 @@ public:
     juce::File getDeadMansPedalFile() const;
 
     int getNumKnownPlugins() const;
+    std::optional<juce::PluginDescription> getPluginDescriptionAt(int index) const;
+
+    void createPluginInstanceAsync(const juce::PluginDescription& description,
+                                   double initialSampleRate,
+                                   int initialBufferSize,
+                                   juce::AudioPluginFormat::PluginCreationCallback callback);
 
 private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -25,4 +31,3 @@ private:
     juce::AudioPluginFormatManager formatManager;
     juce::KnownPluginList knownPlugins;
 };
-

@@ -12,8 +12,16 @@ public:
     const juce::AudioDeviceManager& getDeviceManager() const;
 
     juce::String getCurrentDeviceSummary();
+    double getCurrentSampleRate() const;
+    int getCurrentBufferSizeSamples() const;
+    juce::String getActivePluginName() const;
+
+    void setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin);
+    void clearActivePlugin();
 
 private:
+    void prepareActivePlugin();
+
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
                                           int numInputChannels,
                                           float* const* outputChannelData,
@@ -25,4 +33,13 @@ private:
     void audioDeviceStopped() override;
 
     juce::AudioDeviceManager deviceManager;
+    mutable juce::CriticalSection pluginLock;
+    std::unique_ptr<juce::AudioPluginInstance> activePlugin;
+    juce::String activePluginName = "No plugin loaded";
+    juce::AudioBuffer<float> processBuffer;
+    juce::MidiBuffer midiBuffer;
+    double currentSampleRate = 44100.0;
+    int currentBufferSize = 512;
+    int currentInputChannels = 2;
+    int currentOutputChannels = 2;
 };

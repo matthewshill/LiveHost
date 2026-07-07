@@ -19,12 +19,17 @@ private:
     void timerCallback() override;
     void refreshDeviceStatus();
     void refreshPluginStatus();
+    void loadSelectedPlugin();
+    void handlePluginCreated(std::unique_ptr<juce::AudioPluginInstance> plugin, const juce::String& error);
 
     AudioEngine audioEngine;
     PluginManager pluginManager;
     juce::Label titleLabel;
     juce::Label statusLabel;
     juce::Label pluginStatusLabel;
+    juce::Label activePluginLabel;
+    juce::TextButton loadPluginButton;
+    juce::TextButton clearPluginButton;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     std::unique_ptr<juce::PluginListComponent> pluginListComponent;
 };
