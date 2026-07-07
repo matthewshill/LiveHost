@@ -19,21 +19,32 @@ juce::PropertiesFile::Options createPropertiesOptions()
 class PluginManager::EffectOnlyScanner final : public juce::KnownPluginList::CustomScanner
 {
 public:
+    explicit EffectOnlyScanner(PluginManager& pluginManager)
+        : owner(pluginManager)
+    {
+    }
+
     bool findPluginTypesFor(juce::AudioPluginFormat& format,
                             juce::OwnedArray<juce::PluginDescription>& result,
                             const juce::String& fileOrIdentifier) override
     {
+        if (owner.shouldSkipScanCandidate(fileOrIdentifier))
+            return true;
+
         juce::OwnedArray<juce::PluginDescription> scannedPlugins;
         format.findAllTypesForFile(scannedPlugins, fileOrIdentifier);
 
         for (auto* plugin : scannedPlugins)
         {
-            if (plugin != nullptr && ! plugin->isInstrument)
+            if (plugin != nullptr && ! plugin->isInstrument && ! owner.shouldSkipPluginDescription(*plugin))
                 result.add(new juce::PluginDescription(*plugin));
         }
 
         return true;
     }
+
+private:
+    PluginManager& owner;
 };
 
 PluginManager::PluginManager()
@@ -42,9 +53,11 @@ PluginManager::PluginManager()
 
     juce::addDefaultFormatsToManager(formatManager);
 
+    ensureScanExclusionsFileExists();
+    reloadScanExclusions();
     loadKnownPlugins();
     removeInstrumentPlugins();
-    knownPlugins.setCustomScanner(std::make_unique<EffectOnlyScanner>());
+    knownPlugins.setCustomScanner(std::make_unique<EffectOnlyScanner>(*this));
     knownPlugins.addChangeListener(this);
 }
 
@@ -76,9 +89,21 @@ juce::File PluginManager::getDeadMansPedalFile() const
         .getChildFile("PluginScanInProgress.txt");
 }
 
+juce::File PluginManager::getScanExclusionsFile() const
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("LiveHost")
+        .getChildFile("PluginScanExclusions.txt");
+}
+
 int PluginManager::getNumKnownPlugins() const
 {
     return knownPlugins.getNumTypes();
+}
+
+int PluginManager::getNumScanExclusions() const
+{
+    return scanExclusionPatterns.size();
 }
 
 std::optional<juce::PluginDescription> PluginManager::getPluginDescriptionAt(int index) const
@@ -89,6 +114,19 @@ std::optional<juce::PluginDescription> PluginManager::getPluginDescriptionAt(int
         return plugins[index];
 
     return std::nullopt;
+}
+
+void PluginManager::reloadScanExclusions()
+{
+    scanExclusionPatterns.clear();
+
+    for (auto line : juce::StringArray::fromLines(getScanExclusionsFile().loadFileAsString()))
+    {
+        line = line.trim();
+
+        if (line.isNotEmpty() && ! line.startsWithChar('#'))
+            scanExclusionPatterns.addIfNotAlreadyThere(line);
+    }
 }
 
 void PluginManager::createPluginInstanceAsync(const juce::PluginDescription& description,
@@ -120,6 +158,47 @@ void PluginManager::removeInstrumentPlugins()
     for (const auto& plugin : knownPlugins.getTypes())
         if (plugin.isInstrument)
             knownPlugins.removeType(plugin);
+}
+
+void PluginManager::ensureScanExclusionsFileExists() const
+{
+    const auto exclusionsFile = getScanExclusionsFile();
+    exclusionsFile.getParentDirectory().createDirectory();
+
+    if (exclusionsFile.existsAsFile())
+        return;
+
+    exclusionsFile.replaceWithText(
+        "# LiveHost plugin scan exclusions\n"
+        "# Add one case-insensitive pattern per line.\n"
+        "# Matching plugin paths, identifiers, names, or manufacturers are skipped during scans.\n"
+        "# Examples:\n"
+        "# iLok\n"
+        "# PACE\n",
+        false,
+        false);
+}
+
+bool PluginManager::shouldSkipScanCandidate(const juce::String& fileOrIdentifier) const
+{
+    return matchesAnyPattern(fileOrIdentifier, scanExclusionPatterns);
+}
+
+bool PluginManager::shouldSkipPluginDescription(const juce::PluginDescription& description) const
+{
+    return matchesAnyPattern(description.name, scanExclusionPatterns)
+        || matchesAnyPattern(description.descriptiveName, scanExclusionPatterns)
+        || matchesAnyPattern(description.manufacturerName, scanExclusionPatterns)
+        || matchesAnyPattern(description.fileOrIdentifier, scanExclusionPatterns);
+}
+
+bool PluginManager::matchesAnyPattern(const juce::String& text, const juce::StringArray& patterns)
+{
+    for (const auto& pattern : patterns)
+        if (pattern.isNotEmpty() && text.containsIgnoreCase(pattern))
+            return true;
+
+    return false;
 }
 
 void PluginManager::saveKnownPlugins()

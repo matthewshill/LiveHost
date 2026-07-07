@@ -12,9 +12,12 @@ public:
     juce::KnownPluginList& getKnownPluginList();
     juce::PropertiesFile* getPropertiesFile();
     juce::File getDeadMansPedalFile() const;
+    juce::File getScanExclusionsFile() const;
 
     int getNumKnownPlugins() const;
+    int getNumScanExclusions() const;
     std::optional<juce::PluginDescription> getPluginDescriptionAt(int index) const;
+    void reloadScanExclusions();
 
     void createPluginInstanceAsync(const juce::PluginDescription& description,
                                    double initialSampleRate,
@@ -29,8 +32,13 @@ private:
     void loadKnownPlugins();
     void saveKnownPlugins();
     void removeInstrumentPlugins();
+    void ensureScanExclusionsFileExists() const;
+    bool shouldSkipScanCandidate(const juce::String& fileOrIdentifier) const;
+    bool shouldSkipPluginDescription(const juce::PluginDescription& description) const;
+    static bool matchesAnyPattern(const juce::String& text, const juce::StringArray& patterns);
 
     juce::ApplicationProperties appProperties;
     juce::AudioPluginFormatManager formatManager;
     juce::KnownPluginList knownPlugins;
+    juce::StringArray scanExclusionPatterns;
 };

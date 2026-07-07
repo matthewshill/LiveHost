@@ -71,6 +71,22 @@ MainComponent::MainComponent()
     rackTitleLabel.setFont(juce::FontOptions(16.0f, juce::Font::bold));
     addAndMakeVisible(rackTitleLabel);
 
+    scanExclusionsLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(150, 159, 174));
+    scanExclusionsLabel.setFont(juce::FontOptions(13.0f));
+    addAndMakeVisible(scanExclusionsLabel);
+
+    openScanExclusionsButton.setButtonText("Exclusions");
+    openScanExclusionsButton.onClick = [this] { openScanExclusionsFile(); };
+    addAndMakeVisible(openScanExclusionsButton);
+
+    reloadScanExclusionsButton.setButtonText("Reload");
+    reloadScanExclusionsButton.onClick = [this]
+    {
+        pluginManager.reloadScanExclusions();
+        refreshScanExclusionStatus();
+    };
+    addAndMakeVisible(reloadScanExclusionsButton);
+
     inputMeter.setLabel("Input");
     addAndMakeVisible(inputMeter);
 
@@ -105,6 +121,7 @@ MainComponent::MainComponent()
     refreshDeviceStatus();
     refreshPluginStatus();
     refreshMeters();
+    refreshScanExclusionStatus();
     startTimerHz(24);
 }
 
@@ -157,6 +174,13 @@ void MainComponent::resized()
     outputMeter.setBounds(meters.reduced(0, 0).withTrimmedLeft(8));
 
     content.removeFromTop(16);
+
+    auto scanTools = content.removeFromTop(28);
+    scanExclusionsLabel.setBounds(scanTools.removeFromLeft(juce::jmax(180, scanTools.getWidth() - 216)));
+    openScanExclusionsButton.setBounds(scanTools.removeFromLeft(112).reduced(4, 0));
+    reloadScanExclusionsButton.setBounds(scanTools.reduced(4, 0));
+
+    content.removeFromTop(10);
     pluginListComponent->setBounds(content);
 }
 
@@ -165,6 +189,7 @@ void MainComponent::timerCallback()
     refreshDeviceStatus();
     refreshPluginStatus();
     refreshMeters();
+    refreshScanExclusionStatus();
 }
 
 void MainComponent::refreshDeviceStatus()
@@ -256,4 +281,15 @@ void MainComponent::refreshMeters()
 {
     inputMeter.setLevel(audioEngine.getInputPeakLevel());
     outputMeter.setLevel(audioEngine.getOutputPeakLevel());
+}
+
+void MainComponent::refreshScanExclusionStatus()
+{
+    scanExclusionsLabel.setText(juce::String(pluginManager.getNumScanExclusions()) + " scan exclusions active",
+                                juce::dontSendNotification);
+}
+
+void MainComponent::openScanExclusionsFile()
+{
+    pluginManager.getScanExclusionsFile().startAsProcess();
 }

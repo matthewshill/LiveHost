@@ -28,6 +28,8 @@ private:
     void openActivePluginEditor();
     void closePluginEditor();
     void refreshMeters();
+    void refreshScanExclusionStatus();
+    void openScanExclusionsFile();
 
     AudioEngine audioEngine;
     PluginManager pluginManager;
@@ -40,6 +42,9 @@ private:
     juce::ToggleButton bypassPluginButton;
     juce::TextButton openEditorButton;
     juce::Label rackTitleLabel;
+    juce::Label scanExclusionsLabel;
+    juce::TextButton openScanExclusionsButton;
+    juce::TextButton reloadScanExclusionsButton;
     LevelMeter inputMeter;
     LevelMeter outputMeter;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
