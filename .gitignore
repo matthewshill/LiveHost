@@ -1,0 +1,48 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Build outputs
+build/
+cmake-build-*/
+out/
+bin/
+obj/
+DerivedData/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+
+# Xcode
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcuserstate
+*.xccheckout
+
+# Visual Studio / Windows future support
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+x64/
+Win32/
+
+# JUCE / Projucer
+JuceLibraryCode/
+Builds/
+
+# IDEs
+.idea/
+.vscode/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+
