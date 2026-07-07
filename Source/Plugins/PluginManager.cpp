@@ -2,6 +2,17 @@
 
 namespace
 {
+const juce::StringArray& getDefaultScanExclusions()
+{
+    static const juce::StringArray defaults {
+        "WaveShell",
+        "iLok",
+        "PACE"
+    };
+
+    return defaults;
+}
+
 juce::PropertiesFile::Options createPropertiesOptions()
 {
     juce::PropertiesFile::Options options;
@@ -54,6 +65,7 @@ PluginManager::PluginManager()
     juce::addDefaultFormatsToManager(formatManager);
 
     ensureScanExclusionsFileExists();
+    appendMissingDefaultScanExclusions();
     reloadScanExclusions();
     loadKnownPlugins();
     removeInstrumentPlugins();
@@ -177,6 +189,25 @@ void PluginManager::ensureScanExclusionsFileExists() const
         "# PACE\n",
         false,
         false);
+}
+
+void PluginManager::appendMissingDefaultScanExclusions() const
+{
+    const auto exclusionsFile = getScanExclusionsFile();
+    auto patterns = juce::StringArray::fromLines(exclusionsFile.loadFileAsString());
+    auto changed = false;
+
+    for (const auto& pattern : getDefaultScanExclusions())
+    {
+        if (! patterns.contains(pattern, true))
+        {
+            patterns.add(pattern);
+            changed = true;
+        }
+    }
+
+    if (changed)
+        exclusionsFile.replaceWithText(patterns.joinIntoString("\n") + "\n", false, false);
 }
 
 bool PluginManager::shouldSkipScanCandidate(const juce::String& fileOrIdentifier) const

@@ -33,6 +33,7 @@ private:
     void saveKnownPlugins();
     void removeInstrumentPlugins();
     void ensureScanExclusionsFileExists() const;
+    void appendMissingDefaultScanExclusions() const;
     bool shouldSkipScanCandidate(const juce::String& fileOrIdentifier) const;
     bool shouldSkipPluginDescription(const juce::PluginDescription& description) const;
     static bool matchesAnyPattern(const juce::String& text, const juce::StringArray& patterns);
