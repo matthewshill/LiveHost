@@ -67,6 +67,16 @@ bool AudioEngine::isActivePluginBypassed() const
     return activePluginBypassed;
 }
 
+float AudioEngine::getInputPeakLevel() const
+{
+    return inputPeakLevel.load();
+}
+
+float AudioEngine::getOutputPeakLevel() const
+{
+    return outputPeakLevel.load();
+}
+
 void AudioEngine::setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
     const juce::ScopedLock lock(pluginLock);
@@ -135,6 +145,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
             juce::FloatVectorOperations::clear(destination, numSamples);
     }
 
+    inputPeakLevel.store(smoothMeterValue(inputPeakLevel.load(),
+                                          calculatePeakLevel(processBuffer, numInputChannels, numSamples)));
+
     {
         const juce::ScopedLock lock(pluginLock);
 
@@ -148,6 +161,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     for (auto channel = 0; channel < numOutputChannels; ++channel)
         if (auto* output = outputChannelData[channel])
             juce::FloatVectorOperations::copy(output, processBuffer.getReadPointer(channel), numSamples);
+
+    outputPeakLevel.store(smoothMeterValue(outputPeakLevel.load(),
+                                           calculatePeakLevel(processBuffer, numOutputChannels, numSamples)));
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
@@ -173,4 +189,26 @@ void AudioEngine::audioDeviceStopped()
 
     if (activePlugin != nullptr)
         activePlugin->releaseResources();
+
+    inputPeakLevel.store(0.0f);
+    outputPeakLevel.store(0.0f);
+}
+
+float AudioEngine::calculatePeakLevel(const juce::AudioBuffer<float>& buffer, int numChannels, int numSamples)
+{
+    auto peak = 0.0f;
+    const auto channelsToMeasure = juce::jmin(numChannels, buffer.getNumChannels());
+
+    for (auto channel = 0; channel < channelsToMeasure; ++channel)
+        peak = juce::jmax(peak, buffer.getMagnitude(channel, 0, numSamples));
+
+    return juce::jlimit(0.0f, 1.0f, peak);
+}
+
+float AudioEngine::smoothMeterValue(float previousValue, float nextValue)
+{
+    if (nextValue >= previousValue)
+        return nextValue;
+
+    return previousValue * 0.82f + nextValue * 0.18f;
 }

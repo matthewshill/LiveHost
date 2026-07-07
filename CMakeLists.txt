@@ -25,6 +25,8 @@ target_sources(LiveHost
         Source/Audio/AudioEngine.h
         Source/Plugins/PluginManager.cpp
         Source/Plugins/PluginManager.h
+        Source/UI/LevelMeter.cpp
+        Source/UI/LevelMeter.h
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h)

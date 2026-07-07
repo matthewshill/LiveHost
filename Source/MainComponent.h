@@ -4,6 +4,7 @@
 
 #include "Audio/AudioEngine.h"
 #include "Plugins/PluginManager.h"
+#include "UI/LevelMeter.h"
 
 class MainComponent final : public juce::Component,
                             private juce::Timer
@@ -26,6 +27,7 @@ private:
     void clearLoadedPlugin();
     void openActivePluginEditor();
     void closePluginEditor();
+    void refreshMeters();
 
     AudioEngine audioEngine;
     PluginManager pluginManager;
@@ -37,6 +39,9 @@ private:
     juce::TextButton clearPluginButton;
     juce::ToggleButton bypassPluginButton;
     juce::TextButton openEditorButton;
+    juce::Label rackTitleLabel;
+    LevelMeter inputMeter;
+    LevelMeter outputMeter;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     std::unique_ptr<juce::PluginListComponent> pluginListComponent;
     std::unique_ptr<PluginEditorWindow> pluginEditorWindow;

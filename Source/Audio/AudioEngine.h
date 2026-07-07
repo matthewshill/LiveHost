@@ -17,6 +17,8 @@ public:
     juce::String getActivePluginName() const;
     bool hasActivePlugin() const;
     bool isActivePluginBypassed() const;
+    float getInputPeakLevel() const;
+    float getOutputPeakLevel() const;
 
     void setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin);
     void clearActivePlugin();
@@ -35,6 +37,8 @@ private:
 
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
+    static float calculatePeakLevel(const juce::AudioBuffer<float>& buffer, int numChannels, int numSamples);
+    static float smoothMeterValue(float previousValue, float nextValue);
 
     juce::AudioDeviceManager deviceManager;
     mutable juce::CriticalSection pluginLock;
@@ -47,4 +51,6 @@ private:
     int currentBufferSize = 512;
     int currentInputChannels = 2;
     int currentOutputChannels = 2;
+    std::atomic<float> inputPeakLevel { 0.0f };
+    std::atomic<float> outputPeakLevel { 0.0f };
 };

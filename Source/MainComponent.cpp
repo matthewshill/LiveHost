@@ -66,6 +66,17 @@ MainComponent::MainComponent()
     openEditorButton.onClick = [this] { openActivePluginEditor(); };
     addAndMakeVisible(openEditorButton);
 
+    rackTitleLabel.setText("Rack 1", juce::dontSendNotification);
+    rackTitleLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(236, 239, 244));
+    rackTitleLabel.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+    addAndMakeVisible(rackTitleLabel);
+
+    inputMeter.setLabel("Input");
+    addAndMakeVisible(inputMeter);
+
+    outputMeter.setLabel("Output");
+    addAndMakeVisible(outputMeter);
+
     deviceSelector = std::make_unique<juce::AudioDeviceSelectorComponent>(
         audioEngine.getDeviceManager(),
         0,
@@ -93,7 +104,8 @@ MainComponent::MainComponent()
     setSize(1280, 760);
     refreshDeviceStatus();
     refreshPluginStatus();
-    startTimerHz(2);
+    refreshMeters();
+    startTimerHz(24);
 }
 
 MainComponent::~MainComponent()
@@ -132,6 +144,7 @@ void MainComponent::resized()
     deviceSelector->setBounds(deviceArea);
 
     auto pluginControls = content.removeFromTop(32);
+    rackTitleLabel.setBounds(pluginControls.removeFromLeft(84));
     activePluginLabel.setBounds(pluginControls.removeFromLeft(juce::jmax(220, pluginControls.getWidth() - 460)));
     bypassPluginButton.setBounds(pluginControls.removeFromLeft(92).reduced(4, 0));
     openEditorButton.setBounds(pluginControls.removeFromLeft(124).reduced(4, 0));
@@ -139,6 +152,11 @@ void MainComponent::resized()
     clearPluginButton.setBounds(pluginControls.reduced(4, 0));
 
     content.removeFromTop(12);
+    auto meters = content.removeFromTop(46);
+    inputMeter.setBounds(meters.removeFromLeft(meters.getWidth() / 2).reduced(0, 0).withTrimmedRight(8));
+    outputMeter.setBounds(meters.reduced(0, 0).withTrimmedLeft(8));
+
+    content.removeFromTop(16);
     pluginListComponent->setBounds(content);
 }
 
@@ -146,6 +164,7 @@ void MainComponent::timerCallback()
 {
     refreshDeviceStatus();
     refreshPluginStatus();
+    refreshMeters();
 }
 
 void MainComponent::refreshDeviceStatus()
@@ -231,4 +250,10 @@ void MainComponent::openActivePluginEditor()
 void MainComponent::closePluginEditor()
 {
     pluginEditorWindow = nullptr;
+}
+
+void MainComponent::refreshMeters()
+{
+    inputMeter.setLevel(audioEngine.getInputPeakLevel());
+    outputMeter.setLevel(audioEngine.getOutputPeakLevel());
 }
