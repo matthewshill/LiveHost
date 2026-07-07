@@ -21,6 +21,8 @@ juce_generate_juce_header(LiveHost)
 
 target_sources(LiveHost
     PRIVATE
+        Source/Audio/AudioEngine.cpp
+        Source/Audio/AudioEngine.h
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h)
