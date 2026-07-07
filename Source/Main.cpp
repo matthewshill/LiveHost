@@ -1,5 +1,6 @@
 #include <JuceHeader.h>
 
+#include "Core/AppLogger.h"
 #include "MainComponent.h"
 
 class LiveHostApplication final : public juce::JUCEApplication
@@ -22,11 +23,13 @@ public:
 
     void initialise(const juce::String&) override
     {
+        AppLogger::initialise();
         mainWindow = std::make_unique<MainWindow>(getApplicationName());
     }
 
     void shutdown() override
     {
+        AppLogger::log("LiveHost shutting down");
         mainWindow = nullptr;
     }
 
@@ -64,4 +67,3 @@ private:
 };
 
 START_JUCE_APPLICATION(LiveHostApplication)
-

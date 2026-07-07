@@ -1,5 +1,7 @@
 #include "PluginManager.h"
 
+#include "../Core/AppLogger.h"
+
 namespace
 {
 const juce::StringArray& getDefaultScanExclusions()
@@ -7,7 +9,10 @@ const juce::StringArray& getDefaultScanExclusions()
     static const juce::StringArray defaults {
         "WaveShell",
         "iLok",
-        "PACE"
+        "PACE",
+        "Serato Hex FX",
+        "iZVocalSynth2",
+        "VocalSynth2"
     };
 
     return defaults;
@@ -40,7 +45,14 @@ public:
                             const juce::String& fileOrIdentifier) override
     {
         if (owner.shouldSkipScanCandidate(fileOrIdentifier))
+        {
+            AppLogger::logScanEvent("skip candidate", format.getName() + " | " + fileOrIdentifier);
+            AppLogger::writeLastScanStatus("skipped", format.getName(), fileOrIdentifier);
             return true;
+        }
+
+        AppLogger::logScanEvent("begin candidate", format.getName() + " | " + fileOrIdentifier);
+        AppLogger::writeLastScanStatus("scanning", format.getName(), fileOrIdentifier);
 
         juce::OwnedArray<juce::PluginDescription> scannedPlugins;
         format.findAllTypesForFile(scannedPlugins, fileOrIdentifier);
@@ -48,9 +60,17 @@ public:
         for (auto* plugin : scannedPlugins)
         {
             if (plugin != nullptr && ! plugin->isInstrument && ! owner.shouldSkipPluginDescription(*plugin))
+            {
                 result.add(new juce::PluginDescription(*plugin));
+                AppLogger::logScanEvent("add effect", plugin->pluginFormatName + " | " + plugin->name);
+            }
+            else if (plugin != nullptr)
+            {
+                AppLogger::logScanEvent("skip plugin", plugin->pluginFormatName + " | " + plugin->name);
+            }
         }
 
+        AppLogger::writeLastScanStatus("completed", format.getName(), fileOrIdentifier);
         return true;
     }
 
@@ -60,6 +80,9 @@ private:
 
 PluginManager::PluginManager()
 {
+    AppLogger::initialise();
+    AppLogger::log("Initialising plugin manager");
+
     appProperties.setStorageParameters(createPropertiesOptions());
 
     juce::addDefaultFormatsToManager(formatManager);
