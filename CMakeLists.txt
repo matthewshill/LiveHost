@@ -23,6 +23,8 @@ target_sources(LiveHost
     PRIVATE
         Source/Audio/AudioEngine.cpp
         Source/Audio/AudioEngine.h
+        Source/Plugins/PluginManager.cpp
+        Source/Plugins/PluginManager.h
         Source/Main.cpp
         Source/MainComponent.cpp
         Source/MainComponent.h)
@@ -31,6 +33,10 @@ target_compile_definitions(LiveHost
     PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
+        JUCE_PLUGINHOST_AU=1
+        JUCE_PLUGINHOST_LV2=0
+        JUCE_PLUGINHOST_VST=0
+        JUCE_PLUGINHOST_VST3=1
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:LiveHost,JUCE_PRODUCT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}")
 
