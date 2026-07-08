@@ -27,6 +27,7 @@ private:
                           int height,
                           bool rowIsSelected) override;
     void selectedRowsChanged(int lastRowSelected) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
 
     void timerCallback() override;
     void refreshDeviceStatus();

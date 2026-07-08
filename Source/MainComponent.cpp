@@ -170,6 +170,7 @@ MainComponent::MainComponent()
     pluginListComponent->setOptionsButtonText("Scan Plugins");
     pluginListComponent->setScanDialogText("Scanning plugins", "LiveHost is scanning Audio Unit and VST3 plugins.");
     pluginListComponent->setNumberOfThreadsForScanning(1);
+    pluginListComponent->getTableListBox().addMouseListener(this, true);
     addAndMakeVisible(*pluginListComponent);
 
     setSize(1280, 760);
@@ -184,6 +185,10 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
+
+    if (pluginListComponent != nullptr)
+        pluginListComponent->getTableListBox().removeMouseListener(this);
+
     closeAllPluginEditors();
 }
 
@@ -310,6 +315,19 @@ void MainComponent::paintListBoxItem(int rowNumber,
 void MainComponent::selectedRowsChanged(int)
 {
     refreshPluginStatus();
+}
+
+void MainComponent::mouseDoubleClick(const juce::MouseEvent& event)
+{
+    auto& table = pluginListComponent->getTableListBox();
+    const auto tableEvent = event.getEventRelativeTo(&table);
+    const auto row = table.getRowContainingPosition(tableEvent.x, tableEvent.y);
+
+    if (row < 0 || row >= pluginManager.getNumKnownPlugins())
+        return;
+
+    table.selectRow(row);
+    addSelectedPluginToRack();
 }
 
 void MainComponent::refreshDeviceStatus()
