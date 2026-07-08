@@ -5,6 +5,13 @@
 class AudioEngine final : private juce::AudioIODeviceCallback
 {
 public:
+    struct RackSlotInfo
+    {
+        juce::String name;
+        bool bypassed = false;
+        bool hasEditor = false;
+    };
+
     AudioEngine();
     ~AudioEngine() override;
 
@@ -14,19 +21,28 @@ public:
     juce::String getCurrentDeviceSummary();
     double getCurrentSampleRate() const;
     int getCurrentBufferSizeSamples() const;
-    juce::String getActivePluginName() const;
-    bool hasActivePlugin() const;
-    bool isActivePluginBypassed() const;
+    juce::String getRackSummary() const;
+    std::vector<RackSlotInfo> getRackSlotInfos() const;
+    int getNumRackSlots() const;
     float getInputPeakLevel() const;
     float getOutputPeakLevel() const;
 
-    void setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin);
-    void clearActivePlugin();
-    void setActivePluginBypassed(bool shouldBeBypassed);
-    std::unique_ptr<juce::AudioProcessorEditor> createActivePluginEditor();
+    void addPluginToRack(std::unique_ptr<juce::AudioPluginInstance> plugin);
+    void removeRackSlot(int slotIndex);
+    void clearRack();
+    void setRackSlotBypassed(int slotIndex, bool shouldBeBypassed);
+    std::unique_ptr<juce::AudioProcessorEditor> createRackSlotEditor(int slotIndex);
 
 private:
-    void prepareActivePlugin();
+    struct RackSlot
+    {
+        std::unique_ptr<juce::AudioPluginInstance> plugin;
+        juce::String name;
+        bool bypassed = false;
+    };
+
+    void preparePlugin(juce::AudioPluginInstance& plugin);
+    void releaseRackResources();
 
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
                                           int numInputChannels,
@@ -41,10 +57,8 @@ private:
     static float smoothMeterValue(float previousValue, float nextValue);
 
     juce::AudioDeviceManager deviceManager;
-    mutable juce::CriticalSection pluginLock;
-    std::unique_ptr<juce::AudioPluginInstance> activePlugin;
-    juce::String activePluginName = "No plugin loaded";
-    bool activePluginBypassed = false;
+    mutable juce::CriticalSection rackLock;
+    std::vector<RackSlot> rackSlots;
     juce::AudioBuffer<float> processBuffer;
     juce::MidiBuffer midiBuffer;
     double currentSampleRate = 44100.0;

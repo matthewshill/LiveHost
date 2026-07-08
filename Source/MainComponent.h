@@ -7,6 +7,7 @@
 #include "UI/LevelMeter.h"
 
 class MainComponent final : public juce::Component,
+                            private juce::ListBoxModel,
                             private juce::Timer
 {
 public:
@@ -19,14 +20,24 @@ public:
 private:
     class PluginEditorWindow;
 
+    int getNumRows() override;
+    void paintListBoxItem(int rowNumber,
+                          juce::Graphics& g,
+                          int width,
+                          int height,
+                          bool rowIsSelected) override;
+    void selectedRowsChanged(int lastRowSelected) override;
+
     void timerCallback() override;
     void refreshDeviceStatus();
     void refreshPluginStatus();
-    void loadSelectedPlugin();
+    void addSelectedPluginToRack();
     void handlePluginCreated(std::unique_ptr<juce::AudioPluginInstance> plugin, const juce::String& error);
-    void clearLoadedPlugin();
-    void openActivePluginEditor();
+    void removeSelectedRackSlot();
+    void clearRack();
+    void openSelectedRackSlotEditor();
     void closePluginEditor();
+    int getSelectedRackSlotIndex() const;
     void refreshMeters();
     void refreshScanExclusionStatus();
     void openScanExclusionsFile();
@@ -36,12 +47,14 @@ private:
     juce::Label titleLabel;
     juce::Label statusLabel;
     juce::Label pluginStatusLabel;
-    juce::Label activePluginLabel;
+    juce::Label rackStatusLabel;
     juce::TextButton loadPluginButton;
+    juce::TextButton removeSlotButton;
     juce::TextButton clearPluginButton;
     juce::ToggleButton bypassPluginButton;
     juce::TextButton openEditorButton;
     juce::Label rackTitleLabel;
+    juce::ListBox rackListBox;
     juce::Label scanExclusionsLabel;
     juce::TextButton openScanExclusionsButton;
     juce::TextButton reloadScanExclusionsButton;

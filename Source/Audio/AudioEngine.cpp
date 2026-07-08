@@ -39,32 +39,49 @@ juce::String AudioEngine::getCurrentDeviceSummary()
 
 double AudioEngine::getCurrentSampleRate() const
 {
-    const juce::ScopedLock lock(pluginLock);
+    const juce::ScopedLock lock(rackLock);
     return currentSampleRate;
 }
 
 int AudioEngine::getCurrentBufferSizeSamples() const
 {
-    const juce::ScopedLock lock(pluginLock);
+    const juce::ScopedLock lock(rackLock);
     return currentBufferSize;
 }
 
-juce::String AudioEngine::getActivePluginName() const
+juce::String AudioEngine::getRackSummary() const
 {
-    const juce::ScopedLock lock(pluginLock);
-    return activePluginName;
+    const juce::ScopedLock lock(rackLock);
+
+    if (rackSlots.empty())
+        return "Rack empty";
+
+    return juce::String(rackSlots.size()) + (rackSlots.size() == 1 ? " plugin loaded" : " plugins loaded");
 }
 
-bool AudioEngine::hasActivePlugin() const
+std::vector<AudioEngine::RackSlotInfo> AudioEngine::getRackSlotInfos() const
 {
-    const juce::ScopedLock lock(pluginLock);
-    return activePlugin != nullptr;
+    const juce::ScopedLock lock(rackLock);
+
+    std::vector<RackSlotInfo> slots;
+    slots.reserve(rackSlots.size());
+
+    for (const auto& slot : rackSlots)
+    {
+        RackSlotInfo info;
+        info.name = slot.name;
+        info.bypassed = slot.bypassed;
+        info.hasEditor = slot.plugin != nullptr && slot.plugin->hasEditor();
+        slots.push_back(info);
+    }
+
+    return slots;
 }
 
-bool AudioEngine::isActivePluginBypassed() const
+int AudioEngine::getNumRackSlots() const
 {
-    const juce::ScopedLock lock(pluginLock);
-    return activePluginBypassed;
+    const juce::ScopedLock lock(rackLock);
+    return static_cast<int>(rackSlots.size());
 }
 
 float AudioEngine::getInputPeakLevel() const
@@ -77,50 +94,79 @@ float AudioEngine::getOutputPeakLevel() const
     return outputPeakLevel.load();
 }
 
-void AudioEngine::setActivePlugin(std::unique_ptr<juce::AudioPluginInstance> plugin)
+void AudioEngine::addPluginToRack(std::unique_ptr<juce::AudioPluginInstance> plugin)
 {
-    const juce::ScopedLock lock(pluginLock);
-
-    if (activePlugin != nullptr)
-        activePlugin->releaseResources();
-
-    activePlugin = std::move(plugin);
-    activePluginName = activePlugin != nullptr ? activePlugin->getName() : "No plugin loaded";
-    activePluginBypassed = false;
-    prepareActivePlugin();
-}
-
-void AudioEngine::clearActivePlugin()
-{
-    setActivePlugin(nullptr);
-}
-
-void AudioEngine::setActivePluginBypassed(bool shouldBeBypassed)
-{
-    const juce::ScopedLock lock(pluginLock);
-    activePluginBypassed = shouldBeBypassed;
-}
-
-std::unique_ptr<juce::AudioProcessorEditor> AudioEngine::createActivePluginEditor()
-{
-    const juce::ScopedLock lock(pluginLock);
-
-    if (activePlugin == nullptr || ! activePlugin->hasEditor())
-        return nullptr;
-
-    return std::unique_ptr<juce::AudioProcessorEditor>(activePlugin->createEditorAndMakeActive());
-}
-
-void AudioEngine::prepareActivePlugin()
-{
-    if (activePlugin == nullptr)
+    if (plugin == nullptr)
         return;
 
-    activePlugin->setPlayConfigDetails(currentInputChannels,
-                                       currentOutputChannels,
-                                       currentSampleRate,
-                                       currentBufferSize);
-    activePlugin->prepareToPlay(currentSampleRate, currentBufferSize);
+    const juce::ScopedLock lock(rackLock);
+
+    RackSlot slot;
+    slot.name = plugin->getName();
+    slot.plugin = std::move(plugin);
+    preparePlugin(*slot.plugin);
+    rackSlots.push_back(std::move(slot));
+}
+
+void AudioEngine::removeRackSlot(int slotIndex)
+{
+    const juce::ScopedLock lock(rackLock);
+
+    if (! juce::isPositiveAndBelow(slotIndex, static_cast<int>(rackSlots.size())))
+        return;
+
+    if (rackSlots[static_cast<size_t>(slotIndex)].plugin != nullptr)
+        rackSlots[static_cast<size_t>(slotIndex)].plugin->releaseResources();
+
+    rackSlots.erase(rackSlots.begin() + slotIndex);
+}
+
+void AudioEngine::clearRack()
+{
+    const juce::ScopedLock lock(rackLock);
+    releaseRackResources();
+    rackSlots.clear();
+}
+
+void AudioEngine::setRackSlotBypassed(int slotIndex, bool shouldBeBypassed)
+{
+    const juce::ScopedLock lock(rackLock);
+
+    if (! juce::isPositiveAndBelow(slotIndex, static_cast<int>(rackSlots.size())))
+        return;
+
+    rackSlots[static_cast<size_t>(slotIndex)].bypassed = shouldBeBypassed;
+}
+
+std::unique_ptr<juce::AudioProcessorEditor> AudioEngine::createRackSlotEditor(int slotIndex)
+{
+    const juce::ScopedLock lock(rackLock);
+
+    if (! juce::isPositiveAndBelow(slotIndex, static_cast<int>(rackSlots.size())))
+        return nullptr;
+
+    auto& slot = rackSlots[static_cast<size_t>(slotIndex)];
+
+    if (slot.plugin == nullptr || ! slot.plugin->hasEditor())
+        return nullptr;
+
+    return std::unique_ptr<juce::AudioProcessorEditor>(slot.plugin->createEditorAndMakeActive());
+}
+
+void AudioEngine::preparePlugin(juce::AudioPluginInstance& plugin)
+{
+    plugin.setPlayConfigDetails(currentInputChannels,
+                                currentOutputChannels,
+                                currentSampleRate,
+                                currentBufferSize);
+    plugin.prepareToPlay(currentSampleRate, currentBufferSize);
+}
+
+void AudioEngine::releaseRackResources()
+{
+    for (auto& slot : rackSlots)
+        if (slot.plugin != nullptr)
+            slot.plugin->releaseResources();
 }
 
 void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
@@ -149,12 +195,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
                                           calculatePeakLevel(processBuffer, numInputChannels, numSamples)));
 
     {
-        const juce::ScopedLock lock(pluginLock);
+        const juce::ScopedLock lock(rackLock);
 
-        if (activePlugin != nullptr && ! activePluginBypassed)
+        for (auto& slot : rackSlots)
         {
-            midiBuffer.clear();
-            activePlugin->processBlock(processBuffer, midiBuffer);
+            if (slot.plugin != nullptr && ! slot.bypassed)
+            {
+                midiBuffer.clear();
+                slot.plugin->processBlock(processBuffer, midiBuffer);
+            }
         }
     }
 
@@ -168,7 +217,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
-    const juce::ScopedLock lock(pluginLock);
+    const juce::ScopedLock lock(rackLock);
 
     currentSampleRate = device != nullptr ? device->getCurrentSampleRate() : 44100.0;
     currentBufferSize = device != nullptr ? device->getCurrentBufferSizeSamples() : 512;
@@ -180,15 +229,15 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
                           false,
                           false,
                           true);
-    prepareActivePlugin();
+    for (auto& slot : rackSlots)
+        if (slot.plugin != nullptr)
+            preparePlugin(*slot.plugin);
 }
 
 void AudioEngine::audioDeviceStopped()
 {
-    const juce::ScopedLock lock(pluginLock);
-
-    if (activePlugin != nullptr)
-        activePlugin->releaseResources();
+    const juce::ScopedLock lock(rackLock);
+    releaseRackResources();
 
     inputPeakLevel.store(0.0f);
     outputPeakLevel.store(0.0f);
