@@ -36,7 +36,9 @@ private:
     void removeSelectedRackSlot();
     void clearRack();
     void openSelectedRackSlotEditor();
-    void closePluginEditor();
+    void closePluginEditor(int slotIndex);
+    void closeAllPluginEditors();
+    void closePluginEditorsFromSlot(int slotIndex);
     int getSelectedRackSlotIndex() const;
     void refreshMeters();
     void refreshRoutingControls();
@@ -73,5 +75,5 @@ private:
     LevelMeter outputMeter;
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     std::unique_ptr<juce::PluginListComponent> pluginListComponent;
-    std::unique_ptr<PluginEditorWindow> pluginEditorWindow;
+    std::map<int, std::unique_ptr<PluginEditorWindow>> pluginEditorWindows;
 };

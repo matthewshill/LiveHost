@@ -184,7 +184,7 @@ MainComponent::MainComponent()
 MainComponent::~MainComponent()
 {
     stopTimer();
-    closePluginEditor();
+    closeAllPluginEditors();
 }
 
 void MainComponent::paint(juce::Graphics& g)
@@ -379,9 +379,8 @@ void MainComponent::handlePluginCreated(std::unique_ptr<juce::AudioPluginInstanc
 
 void MainComponent::removeSelectedRackSlot()
 {
-    closePluginEditor();
-
     const auto selectedSlot = getSelectedRackSlotIndex();
+    closePluginEditorsFromSlot(selectedSlot);
     audioEngine.removeRackSlot(selectedSlot);
 
     const auto numSlots = audioEngine.getNumRackSlots();
@@ -394,7 +393,7 @@ void MainComponent::removeSelectedRackSlot()
 
 void MainComponent::clearRack()
 {
-    closePluginEditor();
+    closeAllPluginEditors();
     audioEngine.clearRack();
     rackListBox.deselectAllRows();
     refreshPluginStatus();
@@ -402,13 +401,17 @@ void MainComponent::clearRack()
 
 void MainComponent::openSelectedRackSlotEditor()
 {
-    closePluginEditor();
-
     const auto selectedSlot = getSelectedRackSlotIndex();
     const auto slots = audioEngine.getRackSlotInfos();
 
     if (! juce::isPositiveAndBelow(selectedSlot, static_cast<int>(slots.size())))
         return;
+
+    if (auto existingWindow = pluginEditorWindows.find(selectedSlot); existingWindow != pluginEditorWindows.end())
+    {
+        existingWindow->second->toFront(true);
+        return;
+    }
 
     auto editor = audioEngine.createRackSlotEditor(selectedSlot);
 
@@ -419,14 +422,31 @@ void MainComponent::openSelectedRackSlotEditor()
         return;
     }
 
-    pluginEditorWindow = std::make_unique<PluginEditorWindow>(slots[static_cast<size_t>(selectedSlot)].name,
-                                                              std::move(editor));
-    pluginEditorWindow->onClose = [this] { closePluginEditor(); };
+    auto pluginEditorWindow = std::make_unique<PluginEditorWindow>(slots[static_cast<size_t>(selectedSlot)].name,
+                                                                   std::move(editor));
+    pluginEditorWindow->onClose = [this, selectedSlot] { closePluginEditor(selectedSlot); };
+    pluginEditorWindows[selectedSlot] = std::move(pluginEditorWindow);
 }
 
-void MainComponent::closePluginEditor()
+void MainComponent::closePluginEditor(int slotIndex)
 {
-    pluginEditorWindow = nullptr;
+    pluginEditorWindows.erase(slotIndex);
+}
+
+void MainComponent::closeAllPluginEditors()
+{
+    pluginEditorWindows.clear();
+}
+
+void MainComponent::closePluginEditorsFromSlot(int slotIndex)
+{
+    for (auto it = pluginEditorWindows.begin(); it != pluginEditorWindows.end();)
+    {
+        if (it->first >= slotIndex)
+            it = pluginEditorWindows.erase(it);
+        else
+            ++it;
+    }
 }
 
 int MainComponent::getSelectedRackSlotIndex() const
