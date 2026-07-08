@@ -21,6 +21,12 @@ public:
     juce::String getCurrentDeviceSummary();
     double getCurrentSampleRate() const;
     int getCurrentBufferSizeSamples() const;
+    int getCurrentInputChannels() const;
+    int getCurrentOutputChannels() const;
+    int getSelectedInputPairStartChannel() const;
+    int getSelectedOutputPairStartChannel() const;
+    bool isTestToneEnabled() const;
+    float getTestToneGain() const;
     juce::String getRackSummary() const;
     std::vector<RackSlotInfo> getRackSlotInfos() const;
     int getNumRackSlots() const;
@@ -32,6 +38,10 @@ public:
     void clearRack();
     void setRackSlotBypassed(int slotIndex, bool shouldBeBypassed);
     std::unique_ptr<juce::AudioProcessorEditor> createRackSlotEditor(int slotIndex);
+    void setInputPairStartChannel(int channelIndex);
+    void setOutputPairStartChannel(int channelIndex);
+    void setTestToneEnabled(bool shouldBeEnabled);
+    void setTestToneGain(float gain);
 
 private:
     struct RackSlot
@@ -43,6 +53,8 @@ private:
 
     void preparePlugin(juce::AudioPluginInstance& plugin);
     void releaseRackResources();
+    void updateRoutingAfterDeviceChange();
+    void renderTestTone(int numSamples);
 
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
                                           int numInputChannels,
@@ -65,6 +77,11 @@ private:
     int currentBufferSize = 512;
     int currentInputChannels = 2;
     int currentOutputChannels = 2;
+    int selectedInputPairStartChannel = 0;
+    int selectedOutputPairStartChannel = 0;
+    bool testToneEnabled = false;
+    float testToneGain = 0.125f;
+    double testTonePhase = 0.0;
     std::atomic<float> inputPeakLevel { 0.0f };
     std::atomic<float> outputPeakLevel { 0.0f };
 };

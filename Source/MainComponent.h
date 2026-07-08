@@ -39,8 +39,12 @@ private:
     void closePluginEditor();
     int getSelectedRackSlotIndex() const;
     void refreshMeters();
+    void refreshRoutingControls();
     void refreshScanExclusionStatus();
     void openScanExclusionsFile();
+    void populateChannelPairBox(juce::ComboBox& box, int numChannels, int selectedStartChannel);
+    static int comboIdToChannelStart(int comboId);
+    static int channelStartToComboId(int channelStart);
 
     AudioEngine audioEngine;
     PluginManager pluginManager;
@@ -55,6 +59,13 @@ private:
     juce::TextButton openEditorButton;
     juce::Label rackTitleLabel;
     juce::ListBox rackListBox;
+    juce::Label inputPairLabel;
+    juce::ComboBox inputPairBox;
+    juce::Label outputPairLabel;
+    juce::ComboBox outputPairBox;
+    juce::ToggleButton testToneButton;
+    juce::Label testToneLevelLabel;
+    juce::Slider testToneLevelSlider;
     juce::Label scanExclusionsLabel;
     juce::TextButton openScanExclusionsButton;
     juce::TextButton reloadScanExclusionsButton;

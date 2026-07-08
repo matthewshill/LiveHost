@@ -1,5 +1,15 @@
 #include "AudioEngine.h"
 
+namespace
+{
+int clampToStereoPairStart(int channelIndex, int numChannels)
+{
+    const auto maxStartChannel = numChannels >= 2 ? ((numChannels - 2) / 2) * 2 : 0;
+    const auto clamped = juce::jlimit(0, maxStartChannel, channelIndex);
+    return (clamped / 2) * 2;
+}
+} // namespace
+
 AudioEngine::AudioEngine()
 {
     constexpr int defaultInputs = 2;
@@ -47,6 +57,42 @@ int AudioEngine::getCurrentBufferSizeSamples() const
 {
     const juce::ScopedLock lock(rackLock);
     return currentBufferSize;
+}
+
+int AudioEngine::getCurrentInputChannels() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return currentInputChannels;
+}
+
+int AudioEngine::getCurrentOutputChannels() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return currentOutputChannels;
+}
+
+int AudioEngine::getSelectedInputPairStartChannel() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return selectedInputPairStartChannel;
+}
+
+int AudioEngine::getSelectedOutputPairStartChannel() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return selectedOutputPairStartChannel;
+}
+
+bool AudioEngine::isTestToneEnabled() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return testToneEnabled;
+}
+
+float AudioEngine::getTestToneGain() const
+{
+    const juce::ScopedLock lock(rackLock);
+    return testToneGain;
 }
 
 juce::String AudioEngine::getRackSummary() const
@@ -153,10 +199,34 @@ std::unique_ptr<juce::AudioProcessorEditor> AudioEngine::createRackSlotEditor(in
     return std::unique_ptr<juce::AudioProcessorEditor>(slot.plugin->createEditorAndMakeActive());
 }
 
+void AudioEngine::setInputPairStartChannel(int channelIndex)
+{
+    const juce::ScopedLock lock(rackLock);
+    selectedInputPairStartChannel = clampToStereoPairStart(channelIndex, currentInputChannels);
+}
+
+void AudioEngine::setOutputPairStartChannel(int channelIndex)
+{
+    const juce::ScopedLock lock(rackLock);
+    selectedOutputPairStartChannel = clampToStereoPairStart(channelIndex, currentOutputChannels);
+}
+
+void AudioEngine::setTestToneEnabled(bool shouldBeEnabled)
+{
+    const juce::ScopedLock lock(rackLock);
+    testToneEnabled = shouldBeEnabled;
+}
+
+void AudioEngine::setTestToneGain(float gain)
+{
+    const juce::ScopedLock lock(rackLock);
+    testToneGain = juce::jlimit(0.0f, 1.0f, gain);
+}
+
 void AudioEngine::preparePlugin(juce::AudioPluginInstance& plugin)
 {
-    plugin.setPlayConfigDetails(currentInputChannels,
-                                currentOutputChannels,
+    plugin.setPlayConfigDetails(2,
+                                2,
                                 currentSampleRate,
                                 currentBufferSize);
     plugin.prepareToPlay(currentSampleRate, currentBufferSize);
@@ -169,6 +239,33 @@ void AudioEngine::releaseRackResources()
             slot.plugin->releaseResources();
 }
 
+void AudioEngine::updateRoutingAfterDeviceChange()
+{
+    selectedInputPairStartChannel = clampToStereoPairStart(selectedInputPairStartChannel, currentInputChannels);
+    selectedOutputPairStartChannel = clampToStereoPairStart(selectedOutputPairStartChannel, currentOutputChannels);
+}
+
+void AudioEngine::renderTestTone(int numSamples)
+{
+    constexpr auto frequencyHz = 1000.0;
+    const auto phaseIncrement = juce::MathConstants<double>::twoPi * frequencyHz / currentSampleRate;
+
+    auto* left = processBuffer.getWritePointer(0);
+    auto* right = processBuffer.getWritePointer(1);
+
+    for (auto sample = 0; sample < numSamples; ++sample)
+    {
+        const auto value = static_cast<float>(std::sin(testTonePhase)) * testToneGain;
+        left[sample] = value;
+        right[sample] = value;
+
+        testTonePhase += phaseIncrement;
+
+        if (testTonePhase >= juce::MathConstants<double>::twoPi)
+            testTonePhase -= juce::MathConstants<double>::twoPi;
+    }
+}
+
 void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
                                                    int numInputChannels,
                                                    float* const* outputChannelData,
@@ -176,26 +273,42 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
                                                    int numSamples,
                                                    const juce::AudioIODeviceCallbackContext&)
 {
-    const auto numChannels = juce::jmax(numInputChannels, numOutputChannels);
+    for (auto channel = 0; channel < numOutputChannels; ++channel)
+        if (auto* output = outputChannelData[channel])
+            juce::FloatVectorOperations::clear(output, numSamples);
 
-    if (processBuffer.getNumChannels() < numChannels || processBuffer.getNumSamples() < numSamples)
-        processBuffer.setSize(numChannels, numSamples, false, false, true);
+    if (processBuffer.getNumChannels() < 2 || processBuffer.getNumSamples() < numSamples)
+        processBuffer.setSize(2, numSamples, false, false, true);
 
-    for (auto channel = 0; channel < numChannels; ++channel)
-    {
-        auto* destination = processBuffer.getWritePointer(channel);
+    processBuffer.clear(0, 0, numSamples);
+    processBuffer.clear(1, 0, numSamples);
 
-        if (channel < numInputChannels && inputChannelData[channel] != nullptr)
-            juce::FloatVectorOperations::copy(destination, inputChannelData[channel], numSamples);
-        else
-            juce::FloatVectorOperations::clear(destination, numSamples);
-    }
-
-    inputPeakLevel.store(smoothMeterValue(inputPeakLevel.load(),
-                                          calculatePeakLevel(processBuffer, numInputChannels, numSamples)));
+    auto localOutputPairStart = 0;
 
     {
         const juce::ScopedLock lock(rackLock);
+        const auto localInputPairStart = clampToStereoPairStart(selectedInputPairStartChannel, numInputChannels);
+        localOutputPairStart = clampToStereoPairStart(selectedOutputPairStartChannel, numOutputChannels);
+
+        if (testToneEnabled)
+        {
+            renderTestTone(numSamples);
+        }
+        else
+        {
+            for (auto channel = 0; channel < 2; ++channel)
+            {
+                const auto sourceChannel = localInputPairStart + channel;
+
+                if (sourceChannel < numInputChannels && inputChannelData[sourceChannel] != nullptr)
+                    juce::FloatVectorOperations::copy(processBuffer.getWritePointer(channel),
+                                                      inputChannelData[sourceChannel],
+                                                      numSamples);
+            }
+        }
+
+        inputPeakLevel.store(smoothMeterValue(inputPeakLevel.load(),
+                                              calculatePeakLevel(processBuffer, 2, numSamples)));
 
         for (auto& slot : rackSlots)
         {
@@ -207,12 +320,17 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         }
     }
 
-    for (auto channel = 0; channel < numOutputChannels; ++channel)
-        if (auto* output = outputChannelData[channel])
-            juce::FloatVectorOperations::copy(output, processBuffer.getReadPointer(channel), numSamples);
+    for (auto channel = 0; channel < 2; ++channel)
+    {
+        const auto outputChannel = localOutputPairStart + channel;
+
+        if (outputChannel < numOutputChannels)
+            if (auto* output = outputChannelData[outputChannel])
+                juce::FloatVectorOperations::copy(output, processBuffer.getReadPointer(channel), numSamples);
+    }
 
     outputPeakLevel.store(smoothMeterValue(outputPeakLevel.load(),
-                                           calculatePeakLevel(processBuffer, numOutputChannels, numSamples)));
+                                           calculatePeakLevel(processBuffer, 2, numSamples)));
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
@@ -223,8 +341,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
     currentBufferSize = device != nullptr ? device->getCurrentBufferSizeSamples() : 512;
     currentInputChannels = device != nullptr ? device->getActiveInputChannels().countNumberOfSetBits() : 2;
     currentOutputChannels = device != nullptr ? device->getActiveOutputChannels().countNumberOfSetBits() : 2;
+    updateRoutingAfterDeviceChange();
 
-    processBuffer.setSize(juce::jmax(currentInputChannels, currentOutputChannels),
+    processBuffer.setSize(2,
                           currentBufferSize,
                           false,
                           false,

@@ -82,6 +82,50 @@ MainComponent::MainComponent()
     rackListBox.setOutlineThickness(1);
     addAndMakeVisible(rackListBox);
 
+    inputPairLabel.setText("Input", juce::dontSendNotification);
+    inputPairLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(150, 159, 174));
+    inputPairLabel.setFont(juce::FontOptions(13.0f));
+    addAndMakeVisible(inputPairLabel);
+
+    inputPairBox.onChange = [this]
+    {
+        audioEngine.setInputPairStartChannel(comboIdToChannelStart(inputPairBox.getSelectedId()));
+    };
+    addAndMakeVisible(inputPairBox);
+
+    outputPairLabel.setText("Output", juce::dontSendNotification);
+    outputPairLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(150, 159, 174));
+    outputPairLabel.setFont(juce::FontOptions(13.0f));
+    addAndMakeVisible(outputPairLabel);
+
+    outputPairBox.onChange = [this]
+    {
+        audioEngine.setOutputPairStartChannel(comboIdToChannelStart(outputPairBox.getSelectedId()));
+    };
+    addAndMakeVisible(outputPairBox);
+
+    testToneButton.setButtonText("Tone");
+    testToneButton.onClick = [this]
+    {
+        audioEngine.setTestToneEnabled(testToneButton.getToggleState());
+    };
+    addAndMakeVisible(testToneButton);
+
+    testToneLevelLabel.setText("Tone Level", juce::dontSendNotification);
+    testToneLevelLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(150, 159, 174));
+    testToneLevelLabel.setFont(juce::FontOptions(13.0f));
+    addAndMakeVisible(testToneLevelLabel);
+
+    testToneLevelSlider.setRange(-60.0, -6.0, 1.0);
+    testToneLevelSlider.setValue(-18.0, juce::dontSendNotification);
+    testToneLevelSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 56, 22);
+    testToneLevelSlider.setTextValueSuffix(" dB");
+    testToneLevelSlider.onValueChange = [this]
+    {
+        audioEngine.setTestToneGain(juce::Decibels::decibelsToGain(static_cast<float>(testToneLevelSlider.getValue())));
+    };
+    addAndMakeVisible(testToneLevelSlider);
+
     scanExclusionsLabel.setColour(juce::Label::textColourId, juce::Colour::fromRGB(150, 159, 174));
     scanExclusionsLabel.setFont(juce::FontOptions(13.0f));
     addAndMakeVisible(scanExclusionsLabel);
@@ -132,6 +176,7 @@ MainComponent::MainComponent()
     refreshDeviceStatus();
     refreshPluginStatus();
     refreshMeters();
+    refreshRoutingControls();
     refreshScanExclusionStatus();
     startTimerHz(24);
 }
@@ -184,6 +229,16 @@ void MainComponent::resized()
     rackListBox.setBounds(content.removeFromTop(132));
 
     content.removeFromTop(12);
+    auto routingArea = content.removeFromTop(34);
+    inputPairLabel.setBounds(routingArea.removeFromLeft(44));
+    inputPairBox.setBounds(routingArea.removeFromLeft(116).reduced(4, 0));
+    outputPairLabel.setBounds(routingArea.removeFromLeft(54));
+    outputPairBox.setBounds(routingArea.removeFromLeft(116).reduced(4, 0));
+    testToneButton.setBounds(routingArea.removeFromLeft(76).reduced(8, 0));
+    testToneLevelLabel.setBounds(routingArea.removeFromLeft(78));
+    testToneLevelSlider.setBounds(routingArea.reduced(4, 0));
+
+    content.removeFromTop(12);
     auto meters = content.removeFromTop(46);
     inputMeter.setBounds(meters.removeFromLeft(meters.getWidth() / 2).reduced(0, 0).withTrimmedRight(8));
     outputMeter.setBounds(meters.reduced(0, 0).withTrimmedLeft(8));
@@ -204,6 +259,7 @@ void MainComponent::timerCallback()
     refreshDeviceStatus();
     refreshPluginStatus();
     refreshMeters();
+    refreshRoutingControls();
     refreshScanExclusionStatus();
 }
 
@@ -384,6 +440,20 @@ void MainComponent::refreshMeters()
     outputMeter.setLevel(audioEngine.getOutputPeakLevel());
 }
 
+void MainComponent::refreshRoutingControls()
+{
+    populateChannelPairBox(inputPairBox,
+                           audioEngine.getCurrentInputChannels(),
+                           audioEngine.getSelectedInputPairStartChannel());
+    populateChannelPairBox(outputPairBox,
+                           audioEngine.getCurrentOutputChannels(),
+                           audioEngine.getSelectedOutputPairStartChannel());
+
+    testToneButton.setToggleState(audioEngine.isTestToneEnabled(), juce::dontSendNotification);
+    testToneLevelSlider.setValue(juce::Decibels::gainToDecibels(audioEngine.getTestToneGain()),
+                                 juce::dontSendNotification);
+}
+
 void MainComponent::refreshScanExclusionStatus()
 {
     scanExclusionsLabel.setText(juce::String(pluginManager.getNumScanExclusions()) + " scan exclusions active",
@@ -393,4 +463,43 @@ void MainComponent::refreshScanExclusionStatus()
 void MainComponent::openScanExclusionsFile()
 {
     pluginManager.getScanExclusionsFile().startAsProcess();
+}
+
+void MainComponent::populateChannelPairBox(juce::ComboBox& box, int numChannels, int selectedStartChannel)
+{
+    const auto maxStartChannel = numChannels >= 2 ? ((numChannels - 2) / 2) * 2 : 0;
+    const auto selectedId = channelStartToComboId(juce::jlimit(0, maxStartChannel, selectedStartChannel));
+    const auto existingSelectedId = box.getSelectedId();
+    const auto requiredItems = juce::jmax(1, numChannels / 2);
+
+    if (box.getNumItems() != requiredItems)
+    {
+        box.clear(juce::dontSendNotification);
+
+        if (numChannels < 2)
+        {
+            box.addItem("Mono/Unavailable", channelStartToComboId(0));
+        }
+        else
+        {
+            for (auto startChannel = 0; startChannel <= numChannels - 2; startChannel += 2)
+            {
+                box.addItem(juce::String(startChannel + 1) + "-" + juce::String(startChannel + 2),
+                            channelStartToComboId(startChannel));
+            }
+        }
+    }
+
+    if (existingSelectedId != selectedId)
+        box.setSelectedId(selectedId, juce::dontSendNotification);
+}
+
+int MainComponent::comboIdToChannelStart(int comboId)
+{
+    return juce::jmax(0, comboId - 1);
+}
+
+int MainComponent::channelStartToComboId(int channelStart)
+{
+    return channelStart + 1;
 }
