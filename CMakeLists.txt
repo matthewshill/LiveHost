@@ -50,6 +50,8 @@ juce_add_gui_app(LiveHost
     COMPANY_NAME "LiveHost"
     BUNDLE_ID "com.livehost.app"
     VERSION "${PROJECT_VERSION}"
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "LiveHost needs microphone access to process live audio input through plugin racks."
     ICON_BIG ""
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
