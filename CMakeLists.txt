@@ -8,6 +8,43 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_subdirectory(external/JUCE)
 
+juce_add_console_app(LiveHostPluginScanner
+    PRODUCT_NAME "LiveHostPluginScanner"
+    COMPANY_NAME "LiveHost"
+    VERSION "${PROJECT_VERSION}"
+    NEEDS_CURL FALSE
+    NEEDS_WEB_BROWSER FALSE)
+
+juce_generate_juce_header(LiveHostPluginScanner)
+
+target_sources(LiveHostPluginScanner
+    PRIVATE
+        Source/Scanner/PluginScannerMain.cpp)
+
+target_compile_definitions(LiveHostPluginScanner
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_PLUGINHOST_AU=1
+        JUCE_PLUGINHOST_LV2=0
+        JUCE_PLUGINHOST_VST=0
+        JUCE_PLUGINHOST_VST3=1
+        JUCE_APPLICATION_NAME_STRING="LiveHostPluginScanner"
+        JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}")
+
+target_link_libraries(LiveHostPluginScanner
+    PRIVATE
+        juce::juce_audio_basics
+        juce::juce_audio_processors
+        juce::juce_audio_utils
+        juce::juce_core
+        juce::juce_events
+        juce::juce_gui_basics
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags)
+
 juce_add_gui_app(LiveHost
     PRODUCT_NAME "LiveHost"
     COMPANY_NAME "LiveHost"
@@ -59,3 +96,11 @@ target_link_libraries(LiveHost
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
+
+add_dependencies(LiveHost LiveHostPluginScanner)
+
+add_custom_command(TARGET LiveHost POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:LiveHostPluginScanner>
+        $<TARGET_FILE_DIR:LiveHost>
+    COMMENT "Copying LiveHostPluginScanner next to LiveHost")

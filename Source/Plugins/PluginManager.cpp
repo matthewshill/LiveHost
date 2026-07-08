@@ -4,6 +4,8 @@
 
 namespace
 {
+constexpr auto scannerTimeoutMs = 15000;
+
 const juce::StringArray& getDefaultScanExclusions()
 {
     static const juce::StringArray defaults {
@@ -13,6 +15,7 @@ const juce::StringArray& getDefaultScanExclusions()
         "Serato Hex FX",
         "Kontakt",
         "Supercharger",
+        "Massive X",
         "iZVocalSynth2",
         "VocalSynth2"
     };
@@ -57,7 +60,12 @@ public:
         AppLogger::writeLastScanStatus("scanning", format.getName(), fileOrIdentifier);
 
         juce::OwnedArray<juce::PluginDescription> scannedPlugins;
-        format.findAllTypesForFile(scannedPlugins, fileOrIdentifier);
+
+        if (! owner.scanWithExternalProcess(format, scannedPlugins, fileOrIdentifier))
+        {
+            AppLogger::writeLastScanStatus("failed", format.getName(), fileOrIdentifier);
+            return false;
+        }
 
         for (auto* plugin : scannedPlugins)
         {
@@ -233,6 +241,94 @@ void PluginManager::appendMissingDefaultScanExclusions() const
 
     if (changed)
         exclusionsFile.replaceWithText(patterns.joinIntoString("\n") + "\n", false, false);
+}
+
+juce::File PluginManager::getScannerExecutableFile() const
+{
+    return juce::File::getSpecialLocation(juce::File::currentExecutableFile)
+        .getParentDirectory()
+        .getChildFile("LiveHostPluginScanner");
+}
+
+bool PluginManager::scanWithExternalProcess(juce::AudioPluginFormat& format,
+                                            juce::OwnedArray<juce::PluginDescription>& result,
+                                            const juce::String& fileOrIdentifier) const
+{
+    const auto scannerExecutable = getScannerExecutableFile();
+
+    if (! scannerExecutable.existsAsFile())
+    {
+        AppLogger::logScanEvent("scanner missing", scannerExecutable.getFullPathName());
+        return false;
+    }
+
+    const auto resultFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("LiveHost")
+        .getChildFile("PluginScan")
+        .getNonexistentChildFile("scan-result", ".xml", false);
+
+    juce::StringArray args;
+    args.add(scannerExecutable.getFullPathName());
+    args.add("--format");
+    args.add(format.getName());
+    args.add("--file");
+    args.add(fileOrIdentifier);
+    args.add("--out");
+    args.add(resultFile.getFullPathName());
+
+    juce::ChildProcess scannerProcess;
+
+    if (! scannerProcess.start(args, juce::ChildProcess::wantStdOut))
+    {
+        AppLogger::logScanEvent("scanner start failed", format.getName() + " | " + fileOrIdentifier);
+        return false;
+    }
+
+    if (! scannerProcess.waitForProcessToFinish(scannerTimeoutMs))
+    {
+        scannerProcess.kill();
+        AppLogger::logScanEvent("scanner timeout", format.getName() + " | " + fileOrIdentifier);
+        return false;
+    }
+
+    const auto exitCode = scannerProcess.getExitCode();
+
+    if (exitCode != 0)
+    {
+        AppLogger::logScanEvent("scanner failed",
+                                format.getName() + " | " + fileOrIdentifier + " | exit " + juce::String(exitCode));
+        resultFile.deleteFile();
+        return false;
+    }
+
+    const auto parsed = addDescriptionsFromScanResult(resultFile, result);
+    resultFile.deleteFile();
+    return parsed;
+}
+
+bool PluginManager::addDescriptionsFromScanResult(const juce::File& resultFile,
+                                                  juce::OwnedArray<juce::PluginDescription>& result) const
+{
+    const auto xml = juce::XmlDocument::parse(resultFile);
+
+    if (xml == nullptr || ! xml->hasTagName("LiveHostPluginScanResult"))
+    {
+        AppLogger::logScanEvent("scanner result invalid", resultFile.getFullPathName());
+        return false;
+    }
+
+    for (const auto* child : xml->getChildIterator())
+    {
+        if (child == nullptr || ! child->hasTagName("PLUGIN"))
+            continue;
+
+        auto description = std::make_unique<juce::PluginDescription>();
+
+        if (description->loadFromXml(*child))
+            result.add(description.release());
+    }
+
+    return true;
 }
 
 bool PluginManager::shouldSkipScanCandidate(const juce::String& fileOrIdentifier) const
