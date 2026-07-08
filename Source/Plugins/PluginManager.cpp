@@ -11,6 +11,7 @@ const juce::StringArray& getDefaultScanExclusions()
         "iLok",
         "PACE",
         "Serato Hex FX",
+        "Kontakt",
         "iZVocalSynth2",
         "VocalSynth2"
     };
