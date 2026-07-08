@@ -12,6 +12,7 @@ const juce::StringArray& getDefaultScanExclusions()
         "PACE",
         "Serato Hex FX",
         "Kontakt",
+        "Supercharger",
         "iZVocalSynth2",
         "VocalSynth2"
     };
